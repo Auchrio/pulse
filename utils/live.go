@@ -14,7 +14,7 @@ import (
 )
 
 // StartChat enters interactive chat mode for the given ID
-func StartChat(id string, username string) error {
+func StartChat(id string, username string, verbose bool) error {
 	key := DeriveKey(id)
 	hashedTag := hex.EncodeToString(key)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -24,7 +24,7 @@ func StartChat(id string, username string) error {
 	pk, _ := nostr.GetPublicKey(sk)
 
 	// Fetch history first
-	history, err := FetchHistory(ctx, id, key)
+	history, err := FetchHistory(ctx, id, key, verbose)
 	if err != nil {
 		return err
 	}
@@ -110,6 +110,6 @@ func StartChat(id string, username string) error {
 		// Clear line and print our formatted message
 		fmt.Printf("\033[A\033[K%s\n", formattedMsg)
 
-		PublishEvent(ctx, ev)
+		PublishEvent(ctx, ev, verbose)
 	}
 }

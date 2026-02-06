@@ -54,18 +54,27 @@ func Decrypt(hexData string, key []byte) (string, error) {
 }
 
 // FetchHistory retrieves historical messages from relays
-func FetchHistory(ctx context.Context, id string, key []byte) ([]*nostr.Event, error) {
+func FetchHistory(ctx context.Context, id string, key []byte, verbose bool) ([]*nostr.Event, error) {
 	hashedTag := hex.EncodeToString(key)
 	var allHistory []*nostr.Event
 	var histMu sync.Mutex
 	var wg sync.WaitGroup
 
+	tracker := NewStatusTracker(verbose)
+
+	// Create a longer timeout context for relay connections + message wait
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	for _, url := range Relays {
+		tracker.AddRelay(url)
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
+			tracker.UpdateStatus(u, "pending")
 			r, err := nostr.RelayConnect(ctx, u)
 			if err != nil {
+				tracker.UpdateStatusWithReason(u, "error", err.Error())
 				return
 			}
 
@@ -75,7 +84,8 @@ func FetchHistory(ctx context.Context, id string, key []byte) ([]*nostr.Event, e
 				Limit: HistoryLimit,
 			}})
 
-			timeout := time.After(1500 * time.Millisecond)
+			// Wait maximum 300ms for messages from this relay
+			timeout := time.After(300 * time.Millisecond)
 		Loop:
 			for {
 				select {
@@ -83,13 +93,25 @@ func FetchHistory(ctx context.Context, id string, key []byte) ([]*nostr.Event, e
 					histMu.Lock()
 					allHistory = append(allHistory, ev)
 					histMu.Unlock()
+					tracker.UpdateStatusWithReason(u, "success", "message retrieved")
+					break Loop
 				case <-timeout:
+					tracker.UpdateStatusWithReason(u, "cancelled", "300ms timeout reached")
+					break Loop
+				case <-ctx.Done():
+					tracker.UpdateStatusWithReason(u, "cancelled", "context cancelled")
 					break Loop
 				}
 			}
 		}(url)
 	}
 	wg.Wait()
+
+	if verbose {
+		tracker.FinalizeStatus()
+		tracker.DisplayStatus()
+		fmt.Printf("Total time: %dms\n", tracker.GetTotalDuration().Milliseconds())
+	}
 
 	// Sort History: Oldest to Newest
 	sort.Slice(allHistory, func(i, j int) bool {
@@ -100,19 +122,38 @@ func FetchHistory(ctx context.Context, id string, key []byte) ([]*nostr.Event, e
 }
 
 // PublishEvent publishes an event to all relays
-func PublishEvent(ctx context.Context, event nostr.Event) error {
+func PublishEvent(ctx context.Context, event nostr.Event, verbose bool) error {
 	var wg sync.WaitGroup
+
+	tracker := NewStatusTracker(verbose)
+
 	for _, url := range Relays {
+		tracker.AddRelay(url)
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
+			tracker.UpdateStatus(u, "pending")
 			r, err := nostr.RelayConnect(ctx, u)
 			if err == nil {
-				r.Publish(ctx, event)
+				err = r.Publish(ctx, event)
 				r.Close()
+				if err == nil {
+					tracker.UpdateStatusWithReason(u, "success", "published")
+				} else {
+					tracker.UpdateStatusWithReason(u, "error", err.Error())
+				}
+			} else {
+				tracker.UpdateStatusWithReason(u, "error", err.Error())
 			}
 		}(url)
 	}
 	wg.Wait()
+
+	if verbose {
+		tracker.FinalizeStatus()
+		tracker.DisplayStatus()
+		fmt.Printf("Total time: %dms\n", tracker.GetTotalDuration().Milliseconds())
+	}
+
 	return nil
 }

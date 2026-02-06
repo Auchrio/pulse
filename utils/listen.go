@@ -11,7 +11,7 @@ import (
 )
 
 // ListenForMessage listens for a new message on the given ID and prints it
-func ListenForMessage(id string) error {
+func ListenForMessage(id string, verbose bool) error {
 	key := DeriveKey(id)
 	hashedTag := hex.EncodeToString(key)
 	ctx, cancel := context.WithCancel(context.Background())

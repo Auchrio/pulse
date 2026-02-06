@@ -13,6 +13,7 @@ import (
 
 var chatMode bool
 var listenMode bool
+var verbose bool
 
 var rootCmd = &cobra.Command{
 	Use:   "pulse <id> [message]",
@@ -42,7 +43,7 @@ var rootCmd = &cobra.Command{
 
 		// Listen mode
 		if listenMode {
-			return utils.ListenForMessage(id)
+			return utils.ListenForMessage(id, verbose)
 		}
 
 		// Chat mode
@@ -58,23 +59,24 @@ var rootCmd = &cobra.Command{
 				username = strings.TrimSpace(input)
 			}
 
-			return utils.StartChat(id, username)
+			return utils.StartChat(id, username, verbose)
 		}
 
 		// Send message mode
 		if len(args) > 1 {
 			message := args[1]
-			return utils.SendMessage(id, message)
+			return utils.SendMessage(id, message, verbose)
 		}
 
 		// Retrieve mode (no message, no chat flag)
-		return utils.RetrieveMessage(id)
+		return utils.RetrieveMessage(id, verbose)
 	},
 }
 
 func init() {
 	rootCmd.Flags().BoolVarP(&chatMode, "chat", "c", false, "Enter chat mode")
 	rootCmd.Flags().BoolVarP(&listenMode, "listen", "l", false, "Listen for a new message")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output with relay status")
 }
 
 func main() {
