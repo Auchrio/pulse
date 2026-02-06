@@ -11,7 +11,8 @@ import (
 )
 
 // ListenForMessage listens for a new message on the given ID and prints it
-func ListenForMessage(id string, verbose bool) error {
+// timeout is in seconds, 0 means no timeout
+func ListenForMessage(id string, verbose bool, timeoutSeconds int) error {
 	key := DeriveKey(id)
 	hashedTag := hex.EncodeToString(key)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -66,10 +67,18 @@ func ListenForMessage(id string, verbose bool) error {
 		close(done)
 	}()
 
-	select {
-	case <-done:
+	// Handle timeout
+	if timeoutSeconds == 0 {
+		// No timeout - wait indefinitely
+		<-done
 		return nil
-	case <-time.After(30 * time.Second):
-		return fmt.Errorf("no message received within timeout")
+	} else {
+		// Wait with timeout
+		select {
+		case <-done:
+			return nil
+		case <-time.After(time.Duration(timeoutSeconds) * time.Second):
+			return fmt.Errorf("no message received within timeout")
+		}
 	}
 }

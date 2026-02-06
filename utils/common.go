@@ -18,6 +18,7 @@ import (
 
 var UserSecret = "super-secret-key"
 var HistoryLimit = 5
+var ListenTimeout = 30 // in seconds, 0 = no timeout
 
 var Relays = []string{"wss://relay.damus.io", "wss://nos.lol", "wss://relay.snort.social"}
 

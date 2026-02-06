@@ -15,6 +15,7 @@ type Config struct {
 	HistoryLimit    int
 	UserSecret      string
 	DefaultUsername string
+	ListenTimeout   int
 }
 
 // GetConfigPath returns the path to the pulse.conf file
@@ -45,9 +46,10 @@ func LoadConfig() *Config {
 	defer file.Close()
 
 	config := &Config{
-		Relays:       []string{},
-		HistoryLimit: HistoryLimit,
-		UserSecret:   UserSecret,
+		Relays:        []string{},
+		HistoryLimit:  HistoryLimit,
+		UserSecret:    UserSecret,
+		ListenTimeout: ListenTimeout,
 	}
 
 	scanner := bufio.NewScanner(file)
@@ -85,6 +87,10 @@ func LoadConfig() *Config {
 			config.UserSecret = value
 		case "default-username":
 			config.DefaultUsername = value
+		case "listen-timeout":
+			if timeout, err := strconv.Atoi(value); err == nil {
+				config.ListenTimeout = timeout
+			}
 		}
 	}
 
@@ -105,6 +111,9 @@ func ApplyConfig(config *Config) {
 	}
 	if config.UserSecret != "" {
 		UserSecret = config.UserSecret
+	}
+	if config.ListenTimeout >= 0 {
+		ListenTimeout = config.ListenTimeout
 	}
 }
 
@@ -135,6 +144,9 @@ user-secret = super-secret-key
 # Default username to use in chat mode (optional)
 # If set, skips the username prompt unless overridden from command line
 # default-username = YourName
+
+# Listen timeout in seconds (for -l flag, 0 = no timeout)
+listen-timeout = 30
 `
 
 	file, err := os.Create(confPath)

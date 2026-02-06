@@ -15,6 +15,7 @@ var chatMode bool
 var listenMode bool
 var verbose bool
 var generateConfig bool
+var listenTimeout int
 
 var rootCmd = &cobra.Command{
 	Use:   "pulse <id> [message]",
@@ -59,7 +60,12 @@ var rootCmd = &cobra.Command{
 
 		// Listen mode
 		if listenMode {
-			return utils.ListenForMessage(id, verbose)
+			timeoutSeconds := utils.ListenTimeout // Use config default
+			if listenTimeout >= 0 {
+				// Command-line timeout overrides config
+				timeoutSeconds = listenTimeout
+			}
+			return utils.ListenForMessage(id, verbose, timeoutSeconds)
 		}
 
 		// Chat mode
@@ -118,6 +124,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().BoolVarP(&chatMode, "chat", "c", false, "Enter chat mode")
 	rootCmd.Flags().BoolVarP(&listenMode, "listen", "l", false, "Listen for a new message")
+	rootCmd.Flags().IntVarP(&listenTimeout, "listen-timeout", "t", -1, "Listen timeout in seconds (0 = no timeout, -1 = use config default)")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output with relay status")
 	rootCmd.Flags().BoolVarP(&generateConfig, "generate-config", "g", false, "Generate pulse.conf with default settings")
 }

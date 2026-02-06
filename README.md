@@ -48,9 +48,9 @@ pulse myid "Hello, World!"
 pulse myid
 ```
 
-**Listen for incoming messages (30-second timeout):**
+**Listen for incoming messages (30-second timeout by default):**
 ```bash
-pulse myid -l
+pulse myid -l <timeout>
 ```
 
 **Interactive chat mode:**
@@ -124,22 +124,40 @@ pulse alice -v
 
 ### 3. Listen Mode
 
-Listen for incoming messages on an ID (30-second timeout):
+Listen for incoming messages on an ID with configurable timeout:
 
 ```bash
 pulse <id> -l [options]
 pulse <id> --listen [options]
 ```
 
-**Example:**
+**Examples:**
 ```bash
+# Listen with default timeout (from config, default 30 seconds)
+pulse alice -l
+
+# Listen with custom 60-second timeout
+pulse alice -l -t 60
+
+# Listen with no timeout (waits indefinitely)
+pulse alice -l -t 0
+
+# Listen with verbose output
 pulse alice -l -v
 ```
 
+**Features:**
 - Subscribes to all configured relays
 - Waits for new messages arriving after the command starts
 - Returns immediately when first message is received
 - Ignores messages from the same session (deduplication)
+- Timeout configurable via `-t` flag or `listen-timeout` in config
+
+**Timeout Options:**
+- No flag: Uses `listen-timeout` from `pulse.conf` (default: 30 seconds)
+- `-t 0`: No timeout - waits indefinitely for a message
+- `-t N`: Waits N seconds for a message
+- `-t -1`: Uses config default (same as no flag)
 
 ### 4. Chat Mode
 
@@ -197,6 +215,9 @@ user-secret = super-secret-key
 # Default username to use in chat mode (optional)
 # If set, skips the username prompt unless overridden from command line
 default-username = MyUsername
+
+# Listen timeout in seconds (for -l flag, 0 = no timeout)
+listen-timeout = 30
 ```
 
 ### Configuration Options
@@ -207,6 +228,7 @@ default-username = MyUsername
 | `history-limit` | int | `5` | Maximum number of messages to fetch from history |
 | `user-secret` | string | `super-secret-key` | Master secret for deriving encryption keys (change this!) |
 | `default-username` | string | (none) | Default username for chat mode (skips prompt if set) |
+| `listen-timeout` | int | `30` | Default timeout in seconds for listen mode (0 = no timeout) |
 
 **Note:** If `pulse.conf` doesn't exist, built-in defaults are used. Only override values you need to change.
 
@@ -214,11 +236,12 @@ default-username = MyUsername
 
 ```
 Flags:
-  -c, --chat       Enter chat mode
-  -l, --listen     Listen for a new message
-  -v, --verbose    Verbose output with relay status and timing
-  -g, --generate-config  Generate pulse.conf with default settings
-  -h, --help       Show help message
+  -c, --chat              Enter chat mode
+  -l, --listen            Listen for a new message
+  -t, --listen-timeout    Listen timeout in seconds (0 = no timeout, -1 = use config default)
+  -v, --verbose           Verbose output with relay status and timing
+  -g, --generate-config   Generate pulse.conf with default settings
+  -h, --help              Show help message
 ```
 
 ## Encryption & Security
