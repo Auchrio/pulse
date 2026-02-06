@@ -16,8 +16,8 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const UserSecret = "super-secret-key"
-const HistoryLimit = 5
+var UserSecret = "super-secret-key"
+var HistoryLimit = 5
 
 var Relays = []string{"wss://relay.damus.io", "wss://nos.lol", "wss://relay.snort.social"}
 

@@ -1,2 +1,4 @@
 go.sum
 *.exe
+*.conf
+pulse
