@@ -12,6 +12,7 @@ import (
 )
 
 var chatMode bool
+var listenMode bool
 
 var rootCmd = &cobra.Command{
 	Use:   "pulse <id> [message]",
@@ -37,6 +38,11 @@ var rootCmd = &cobra.Command{
 			if chatFlagIndex > 2 {
 				return fmt.Errorf("message cannot be provided with chat mode")
 			}
+		}
+
+		// Listen mode
+		if listenMode {
+			return utils.ListenForMessage(id)
 		}
 
 		// Chat mode
@@ -68,6 +74,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().BoolVarP(&chatMode, "chat", "c", false, "Enter chat mode")
+	rootCmd.Flags().BoolVarP(&listenMode, "listen", "l", false, "Listen for a new message")
 }
 
 func main() {
