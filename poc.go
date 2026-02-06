@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,9 +19,11 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+// --- CONFIGURATION ---
 var Relays = []string{"wss://relay.damus.io", "wss://nos.lol", "wss://relay.snort.social"}
 
-const UserSecret = "my-app-salt-2026"
+const UserSecret = "super-secret-key"
+const HistoryLimit = 5
 
 var (
 	seenEvents = make(map[string]bool)
@@ -39,8 +42,7 @@ func encrypt(plaintext string, key []byte) (string, error) {
 	gcm, _ := cipher.NewGCM(block)
 	nonce := make([]byte, gcm.NonceSize())
 	io.ReadFull(rand.Reader, nonce)
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-	return hex.EncodeToString(ciphertext), nil
+	return hex.EncodeToString(gcm.Seal(nonce, nonce, []byte(plaintext), nil)), nil
 }
 
 func decrypt(hexData string, key []byte) (string, error) {
@@ -59,8 +61,6 @@ func decrypt(hexData string, key []byte) (string, error) {
 	return string(plaintext), err
 }
 
-// --- MAIN ---
-
 func main() {
 	reader := bufio.NewReader(os.Stdin)
 
@@ -77,22 +77,84 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fmt.Printf("\n--- Connected as [%s] on ID: %s ---\n", username, id)
+	fmt.Printf("\n--- Loading up to %d historical messages for ID: %s ---\n", HistoryLimit, id)
 
 	sk := nostr.GeneratePrivateKey()
 	pk, _ := nostr.GetPublicKey(sk)
 
-	// BACKGROUND LISTENER
+	// --- HISTORY FETCHING ---
+	var allHistory []*nostr.Event
+	var histMu sync.Mutex
+	var wg sync.WaitGroup
+
+	for _, url := range Relays {
+		wg.Add(1)
+		go func(u string) {
+			defer wg.Done()
+			r, err := nostr.RelayConnect(ctx, u)
+			if err != nil {
+				return
+			}
+
+			sub, _ := r.Subscribe(ctx, []nostr.Filter{{
+				Tags:  nostr.TagMap{"t": []string{hashedTag}},
+				Kinds: []int{nostr.KindTextNote},
+				Limit: HistoryLimit, // Uses the hardcoded variable
+			}})
+
+			timeout := time.After(1500 * time.Millisecond)
+		Loop:
+			for {
+				select {
+				case ev := <-sub.Events:
+					histMu.Lock()
+					allHistory = append(allHistory, ev)
+					histMu.Unlock()
+				case <-timeout:
+					break Loop
+				}
+			}
+		}(url)
+	}
+	wg.Wait()
+
+	// Sort History: Oldest to Newest
+	sort.Slice(allHistory, func(i, j int) bool {
+		return allHistory[i].CreatedAt < allHistory[j].CreatedAt
+	})
+
+	// Print History (with de-duplication)
+	for _, ev := range allHistory {
+		seenMu.Lock()
+		if seenEvents[ev.ID] {
+			seenMu.Unlock()
+			continue
+		}
+		seenEvents[ev.ID] = true
+		seenMu.Unlock()
+
+		msg, err := decrypt(ev.Content, key)
+		if err == nil {
+			fmt.Println(msg)
+		}
+	}
+
+	fmt.Printf("--- Connected as [%s] ---\n", username)
+
+	// LIVE LISTENER
 	for _, url := range Relays {
 		go func(u string) {
 			r, err := nostr.RelayConnect(ctx, u)
 			if err != nil {
 				return
 			}
+
+			// We use a custom pointer helper because nostr.TimestampPtr might vary by version
+			now := nostr.Now()
 			sub, _ := r.Subscribe(ctx, []nostr.Filter{{
 				Tags:  nostr.TagMap{"t": []string{hashedTag}},
 				Kinds: []int{nostr.KindTextNote},
-				Limit: 20,
+				Since: &now,
 			}})
 
 			for ev := range sub.Events {
@@ -105,7 +167,6 @@ func main() {
 				seenMu.Unlock()
 
 				msg, err := decrypt(ev.Content, key)
-				// We only print if it's from a partner
 				if err == nil && ev.PubKey != pk {
 					fmt.Printf("\r\033[K%s\n> ", msg)
 				}
@@ -122,7 +183,6 @@ func main() {
 			continue
 		}
 
-		// Format the message: [15:04] user: message
 		timestamp := time.Now().Format("15:04")
 		formattedMsg := fmt.Sprintf("[%s] %s: %s", timestamp, username, text)
 
@@ -140,7 +200,7 @@ func main() {
 		seenEvents[ev.ID] = true
 		seenMu.Unlock()
 
-		// Print our own message immediately so it looks local
+		// ANSI Clear line and print our formatted message
 		fmt.Printf("\033[A\033[K%s\n", formattedMsg)
 
 		for _, url := range Relays {
